@@ -1,0 +1,116 @@
+﻿@using Application.Contracts
+@using Application.Dto
+@using Application.Interfaces
+@using Application.Services
+@using Domain.Models
+@using EmployeeScheduler.Enums
+@inject IJSRuntime JSRuntime
+@inject ICreateShiftUseCase CreateShiftUseCase
+@inject IShiftValidationService ShiftValidationService
+
+@code {
+	[Parameter] public ModalType ModalType { get; set; }
+	[Parameter] public EmployeeDto SelectedEmployee { get; set; }
+	[Parameter] public DateTime SelectedDay { get; set; }
+	[Parameter] public EventCallback<ModalType> OnClose { get; set; }
+	[Parameter] public EventCallback<bool> DataChanged { get; set; }
+
+	private int selectedRoleId;
+	private DateTime _startTime;
+	private DateTime _endTime;
+
+	public DateTime StartTime
+	{
+		get => _startTime;
+		set
+		{
+			_startTime = _startTime.Date + value.TimeOfDay;
+		}
+	}
+
+	public DateTime EndTime
+	{
+		get => _endTime;
+		set
+		{
+			_endTime = _endTime.Date + value.TimeOfDay;
+		}
+	}
+
+	protected override void OnInitialized()
+	{
+		if (SelectedEmployee.Roles.Count > 0)
+		{
+			selectedRoleId = SelectedEmployee.Roles.FirstOrDefault().Id;
+		}
+		_startTime = SelectedDay;
+		_endTime = SelectedDay;
+	}
+
+	private void CloseModal()
+	{
+		OnClose.InvokeAsync(ModalType);
+	}
+
+	private async Task SaveShift()
+	{
+		List<ShiftDto> existingDayShifts = SelectedEmployee.Shifts.FindAll(x => x.Date == SelectedDay);
+		ValidationResult validationResult = await ShiftValidationService.ShiftIsValid(StartTime.TimeOfDay, EndTime.TimeOfDay, SelectedEmployee.Id, selectedRoleId, existingDayShifts);
+
+		if (validationResult.IsValid)
+		{
+			await CreateShiftUseCase.ExecuteAsync(new ShiftDto() { EmployeeId = SelectedEmployee.Id, Date = SelectedDay, RoleId = selectedRoleId, StartTime = StartTime.TimeOfDay, EndTime = EndTime.TimeOfDay });
+			CloseModal();
+			await DataChanged.InvokeAsync(true);
+
+		}
+		else
+		{
+			await JSRuntime.InvokeVoidAsync("alert", String.Join("\n", validationResult.Errors));
+		}
+	}
+
+
+}
+
+<div class="modal-backdrop fade show"></div>
+<div class="modal fade show" style="display: block;" tabindex="-1" role="dialog" aria-labelledby="createShiftLabel" aria-hidden="true">
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title" id="createShiftLabel">Create Shift</h5>
+				<button type="button" class="close" @onclick="CloseModal" aria-label="Close">
+					<span aria-hidden="true">&times;</span>
+				</button>
+			</div>
+			<div class="modal-body">
+				<h5>@SelectedEmployee.Name's Shift</h5>
+
+				<div class="form-group">
+					<label for="roleSelect">Role</label>
+					<select class="form-control" @bind="selectedRoleId" id="roleSelect">
+						<option value="">Select Role</option>
+						@foreach (var role in SelectedEmployee.Roles)
+						{
+							<option value="@role.Id">@role.Name</option>
+						}
+					</select>
+				</div>
+
+				<div class="form-group">
+					<label for="startTime">Start Time</label>
+					<InputDate Type="InputDateType.Time" id="date" @bind-Value="StartTime" class="form-control" />
+				</div>
+
+				<div class="form-group">
+					<label for="endTime">End Time</label>
+					<InputDate Type="InputDateType.Time" id="date" @bind-Value="EndTime" class="form-control" />
+				</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-secondary" @onclick="CloseModal">Close</button>
+				<button type="button" class="btn btn-primary" @onclick="SaveShift">Save</button>
+			</div>
+		</div>
+	</div>
+</div>

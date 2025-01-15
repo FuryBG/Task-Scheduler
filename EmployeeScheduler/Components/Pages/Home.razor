@@ -1,0 +1,133 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@using Application.Dto
+@using Application.Interfaces
+@using Application.Services
+@using Domain.Models
+@using EmployeeScheduler.Enums
+@using EmployeeScheduler.Components.Modals
+@inject IGetEmployeesUseCase GetEmployeeUseCase
+@inject IWeekService WeekService
+
+<PageTitle>Home</PageTitle>
+
+@if (employees != null)
+{
+	<table class="table">
+		<thead>
+			<tr>
+				<th>Employee</th>
+				<th>Mon</th>
+				<th>Tue</th>
+				<th>Wed</th>
+				<th>Thu</th>
+				<th>Fri</th>
+				<th>Sat</th>
+				<th>Sun</th>
+			</tr>
+		</thead>
+		<tbody>
+			@foreach (var employee in employees)
+			{
+				<tr>
+					<td class="align-middle">@employee.Name</td>
+					@foreach (var day in weekDays)
+					{
+						<td>
+							@{
+								var shiftsForDay = employee.Shifts.FindAll(s => s.Date.DayOfWeek == day.DayOfWeek);
+							}
+
+							@if (shiftsForDay.Count != 0)
+							{
+								<div>
+									@foreach (ShiftDto dayShift in shiftsForDay)
+									{
+										<p class="cursor-pointer bg-light rounded-2" @onclick="() => ShowEditShiftModal(dayShift, employee)">[@dayShift.RoleName @dayShift.StartTime.ToString(@"hh\:mm") - @dayShift.EndTime.ToString(@"hh\:mm")]</p>
+									}
+									<button class="btn btn-primary" @onclick="() => ShowCreateShiftModal(employee, day)">+</button>
+								</div>
+
+							}
+							else
+							{
+								<div>
+									<p>No Shift</p>
+									<button class="btn btn-primary" @onclick="() => ShowCreateShiftModal(employee, day)">+</button>
+								</div>
+
+							}
+						</td>
+					}
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+else
+{
+	<h1>Loading...</h1>
+}
+
+@if (showCreateShiftModal)
+{
+	<CreateShiftModal OnClose="CloseModal" ModalType="ModalType.CreateShift" DataChanged="HandleDataChange" SelectedEmployee="selectedEmployee" SelectedDay="selectedDayOfWeek" />
+}
+
+@if (showEditShiftModal)
+{
+	<EditShiftModal OnClose="CloseModal" ModalType="ModalType.EditShift" DataChanged="HandleDataChange" SelectedShift="selectedShift" SelectedEmployee="selectedEmployee" />
+}
+
+
+@code {
+	private List<EmployeeDto> employees;
+	private EmployeeDto selectedEmployee;
+	private ShiftDto selectedShift;
+	private DateTime selectedDayOfWeek;
+	private bool showCreateShiftModal = false;
+	private bool showEditShiftModal = false;
+	private List<DateTime> weekDays;
+
+
+	protected override async Task OnInitializedAsync()
+	{
+		weekDays = WeekService.GetWeekDays();
+		employees = await GetEmployeeUseCase.ExecuteAsync();
+	}
+
+	private void ShowCreateShiftModal(EmployeeDto employee, DateTime selectedWeekDay)
+	{
+		selectedDayOfWeek = selectedWeekDay;
+		selectedEmployee = employee;
+		showCreateShiftModal = true;
+	}
+
+	private void ShowEditShiftModal(ShiftDto dayShift, EmployeeDto employee)
+	{
+		selectedEmployee = employee;
+		selectedShift = dayShift;
+		showEditShiftModal = true;
+	}
+
+	private void CloseModal(ModalType modalType)
+	{
+		if (modalType == ModalType.CreateShift)
+		{
+			showCreateShiftModal = false;
+		}
+		else if (modalType == ModalType.EditShift)
+		{
+			showEditShiftModal = false;
+		}
+	}
+
+	private async Task HandleDataChange(bool dataChanged)
+	{
+		if (dataChanged)
+		{
+			employees = await GetEmployeeUseCase.ExecuteAsync();
+			StateHasChanged();
+		}
+	}
+}
